@@ -10,8 +10,8 @@ cameraview = "2.7.2"
 minSdk = "21"
 compileSdk = "36"
 
-versionCode = "103"
-versionName = "1.0.3"
+versionCode = "105"
+versionName = "1.0.5"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
