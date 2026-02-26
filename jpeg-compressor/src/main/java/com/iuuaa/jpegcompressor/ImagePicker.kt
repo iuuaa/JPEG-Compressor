@@ -68,7 +68,7 @@ class ImagePicker private constructor() {
     fun saveImageToGallery(
         context: Context,
         imagePath: String,
-        displayName: String? = null,
+        displayName: String? = null
     ): Uri? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             return null

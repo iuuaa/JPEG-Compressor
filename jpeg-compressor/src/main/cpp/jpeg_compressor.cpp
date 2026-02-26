@@ -14,7 +14,9 @@
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
+
 #include <stdlib.h>
+
 #endif
 
 #ifndef TJINIT_DECOMPRESS
@@ -366,13 +368,13 @@ static int compress_jpeg_from_buffer(
 /* ==================== 公开 API ==================== */
 
 int compress_jpeg(const char *input_path, const char *output_path, int quality) {
-    return compress_jpeg_ex(input_path, output_path, quality, 0, 0, 0.0f, 0, 0, 0, 0, 0);
+    return compress_jpeg_ex(input_path, output_path, quality, 0, 0, 0.0f, 0, 0, 0, 0, 0, 0);
 }
 
 int compress_jpeg_ex(const char *input_path, const char *output_path, int quality,
                      int target_width, int target_height, float scale,
                      int crop_x, int crop_y, int crop_w, int crop_h,
-                     int fallback_to_original) {
+                     int rotation, int fallback_to_original) {
 
     unsigned char *srcBuf = nullptr;
     unsigned long srcSize = 0;
@@ -408,6 +410,64 @@ int compress_jpeg_ex(const char *input_path, const char *output_path, int qualit
 
     tjDestroy(handle);
     handle = nullptr;
+
+    /* 旋转处理：如果指定了旋转角度，使用 tjTransform 旋转 */
+    if (rotation != 0) {
+        tjtransform xform;
+        memset(&xform, 0, sizeof(tjtransform));
+
+        /* 根据旋转角度设置 transform 类型 */
+        if (rotation == 90) {
+            xform.op = TJXOP_ROT90;
+        } else if (rotation == 180) {
+            xform.op = TJXOP_ROT180;
+        } else if (rotation == 270) {
+            xform.op = TJXOP_ROT270;
+        } else {
+            LOGE("Invalid rotation angle: %d (supported: 90, 180, 270)", rotation);
+            result = -1;
+            goto cleanup_ex;
+        }
+
+        xform.options = TJXOPT_TRIM | TJXOPT_CROP;  /* 裁剪到实际图像区域 */
+
+        /* 使用 tjTransform 旋转 */
+        handle = tjInitTransform();
+        if (!handle) {
+            LOGE("tjInitTransform() failed: %s", tjGetErrorStr());
+            result = -1;
+            goto cleanup_ex;
+        }
+
+        unsigned char *transformedBuf = nullptr;
+        unsigned long transformedSize = 0;
+
+        if (tjTransform(handle, srcBuf, srcSize, 1, &transformedBuf, &transformedSize, &xform, 0) !=
+            0) {
+            LOGE("tjTransform() failed: %s", tjGetErrorStr());
+            tjDestroy(handle);
+            handle = nullptr;
+            result = -1;
+            goto cleanup_ex;
+        }
+
+        /* 释放原始缓冲区，使用旋转后的数据 */
+        free(srcBuf);
+        srcBuf = transformedBuf;
+        srcSize = transformedSize;
+
+        /* 更新尺寸（90/270度旋转会交换宽高） */
+        if (rotation == 90 || rotation == 270) {
+            int temp = width;
+            width = height;
+            height = temp;
+        }
+
+        tjDestroy(handle);
+        handle = nullptr;
+
+        LOGI("autoRotate: image rotated %d degrees, new size %dx%d", rotation, width, height);
+    }
 
     /* 尺寸与 OOM 检查 */
     pixels = (unsigned long) width * (unsigned long) height;
@@ -488,68 +548,5 @@ int compress_jpeg_ex(const char *input_path, const char *output_path, int qualit
     cleanup_ex:
     if (srcBuf) free(srcBuf);
     if (handle) tjDestroy(handle);
-    return result;
-}
-
-/*
- * 只读取 JPEG 头部获取尺寸（性能优化：不读取整个文件）
- * JPEG 头部信息通常在前 64KB 内
- */
-int get_jpeg_dimensions(const char *path, int *width, int *height, unsigned long *file_size) {
-    FILE *file = nullptr;
-    unsigned char *headerBuf = nullptr;
-    tjhandle handle = nullptr;
-    int jpegSubsamp, jpegColorspace;
-    int result = -1;
-    const size_t HEADER_SIZE = 65536; /* 64KB 足够读取 JPEG 头 */
-
-    file = fopen(path, "rb");
-    if (!file) {
-        LOGE("Cannot open file: %s", path);
-        return -1;
-    }
-
-    /* 获取文件大小 */
-    fseek(file, 0, SEEK_END);
-    unsigned long fileLen = ftell(file);
-    fseek(file, 0, SEEK_SET);
-
-    if (file_size) {
-        *file_size = fileLen;
-    }
-
-    /* 只读取头部（最多 64KB 或文件大小） */
-    size_t readSize = (fileLen < HEADER_SIZE) ? fileLen : HEADER_SIZE;
-    headerBuf = (unsigned char *) malloc(readSize);
-    if (!headerBuf) {
-        LOGE("Cannot allocate header buffer");
-        fclose(file);
-        return -1;
-    }
-
-    if (fread(headerBuf, 1, readSize, file) != readSize) {
-        LOGE("Failed to read header: %s", path);
-        free(headerBuf);
-        fclose(file);
-        return -1;
-    }
-    fclose(file);
-
-    handle = tjInitDecompress();
-    if (!handle) {
-        LOGE("tjInitDecompress() failed: %s", tjGetErrorStr());
-        free(headerBuf);
-        return -1;
-    }
-
-    if (tjDecompressHeader3(handle, headerBuf, readSize, width, height,
-                            &jpegSubsamp, &jpegColorspace) != 0) {
-        LOGE("tjDecompressHeader3() failed: %s", tjGetErrorStr());
-    } else {
-        result = 0;
-    }
-
-    tjDestroy(handle);
-    free(headerBuf);
     return result;
 }

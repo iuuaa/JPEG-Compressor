@@ -181,7 +181,7 @@ compressor.compressSync(inputPath, outputPath, 85, targetWidth = tw, targetHeigh
 
 ```kotlin
 val info = compressor.getImageInfo("/path/to/image.jpg")
-// info.width, info.height, info.fileSize, info.path（fileSize 由 libjpeg-turbo 读头得到）
+// info.width, info.height, info.fileSize, info.path（尺寸与 fileSize 由 BitmapFactory 仅读头/文件系统得到）
 ```
 
 ### 6. 图片选择（需配合 registerForActivityResult）

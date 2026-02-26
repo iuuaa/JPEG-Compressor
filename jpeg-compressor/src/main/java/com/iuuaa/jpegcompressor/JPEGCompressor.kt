@@ -5,6 +5,10 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
+import androidx.exifinterface.media.ExifInterface
+import com.iuuaa.jpegcompressor.JPEGCompressor.Companion.ERROR_IMAGE_TOO_LARGE
+import com.iuuaa.jpegcompressor.JPEGCompressor.Companion.MAX_DIMENSION
+import com.iuuaa.jpegcompressor.JPEGCompressor.Companion.MAX_PIXELS
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.disposables.Disposable
@@ -39,6 +43,9 @@ private const val LOG_TAG = "JPEGCompressor"
  * ## 压缩优化说明
  * 当前使用：TurboJPEG API、TJSAMP_420 色度子采样、TJFLAG_FASTDCT（速度优先）。
  * optimize_coding 需使用 libjpeg 标准 API，TurboJPEG 未暴露；SIMD 可在构建时启用以提升速度。
+ *
+ * ## 图片信息获取
+ * [getImageInfo] 使用 BitmapFactory 仅读头（inJustDecodeBounds），无 Native 读头，兼容性更好。
  */
 class JPEGCompressor private constructor() {
 
@@ -54,7 +61,7 @@ class JPEGCompressor private constructor() {
         ): Int
 
         /**
-         * Native 压缩方法（扩展版，支持缩放、裁剪、容错）
+         * Native 压缩方法（扩展版，支持缩放、裁剪、旋转、容错）
          *
          * @param inputPath 输入路径
          * @param outputPath 输出路径
@@ -66,6 +73,7 @@ class JPEGCompressor private constructor() {
          * @param cropY 裁剪区域左上角 Y
          * @param cropW 裁剪区域宽度
          * @param cropH 裁剪区域高度
+         * @param rotation 旋转角度（0=不旋转, 90=顺时针90度, 180=180度, 270=顺时针270度）
          * @param fallbackToOriginal 压缩失败时是否复制原图
          * @return 0 成功，1 fallback 成功，-1 失败，-2 图片过大
          */
@@ -81,17 +89,9 @@ class JPEGCompressor private constructor() {
             cropY: Int,
             cropW: Int,
             cropH: Int,
+            rotation: Int,
             fallbackToOriginal: Boolean,
         ): Int
-
-        /**
-         * Native 获取图片信息方法
-         *
-         * @param imagePath 图片路径
-         * @return LongArray [width, height, fileSize]，失败返回 null
-         */
-        @JvmStatic
-        private external fun nativeGetImageInfo(imagePath: String): LongArray?
 
         init {
             System.loadLibrary("jpegcompressor")
@@ -133,6 +133,7 @@ class JPEGCompressor private constructor() {
      * @property outputHeight 输出图片高度
      * @property compressionRatio 压缩率（%），负数表示体积增大
      * @property fallbackUsed 是否使用了 fallback（复制原图）
+     * @property rotationApplied 若启用了自动旋转且 EXIF 有旋转信息，则为实际应用的旋转角度（90/180/270），否则为 0
      * @property errorMessage 错误信息（失败时）
      */
     data class CompressResult(
@@ -147,6 +148,7 @@ class JPEGCompressor private constructor() {
         val outputHeight: Int,
         val compressionRatio: Float,
         val fallbackUsed: Boolean = false,
+        val rotationApplied: Int = 0,
         val errorMessage: String? = null,
     )
 
@@ -242,6 +244,7 @@ class JPEGCompressor private constructor() {
      * @param cropY 裁剪区域左上角 Y 坐标（相对于原图）
      * @param cropW 裁剪区域宽度，0 表示不裁剪
      * @param cropH 裁剪区域高度，0 表示不裁剪
+     * @param autoRotate 是否自动根据 EXIF Orientation 旋转图片回正常角度，默认 false
      * @param fallbackToOriginalOnError 压缩失败时是否复制原图到输出路径，默认 false
      * @return CompressResult 压缩结果，通过 success 判断是否成功，fallbackUsed 判断是否使用了原图
      */
@@ -257,6 +260,7 @@ class JPEGCompressor private constructor() {
         cropY: Int = 0,
         cropW: Int = 0,
         cropH: Int = 0,
+        autoRotate: Boolean = false,
         fallbackToOriginalOnError: Boolean = false,
     ): CompressResult {
         return try {
@@ -274,6 +278,7 @@ class JPEGCompressor private constructor() {
                     outputHeight = 0,
                     compressionRatio = 0f,
                     fallbackUsed = false,
+                    rotationApplied = 0,
                     errorMessage = "输入文件不存在"
                 )
             }
@@ -285,14 +290,30 @@ class JPEGCompressor private constructor() {
             val memBeforeKb = (runtime.totalMemory() - runtime.freeMemory()) / 1024
             val startNanos = System.nanoTime()
 
+            /* 读取 EXIF 旋转角度 */
+            val rotation = if (autoRotate) getExifRotation(inputPath) else 0
+            if (autoRotate && rotation != 0) {
+                Log.i(
+                    LOG_TAG,
+                    "autoRotate enabled: EXIF orientation -> rotation ${rotation}°, input=$inputPath"
+                )
+            }
+
+            Log.i(
+                LOG_TAG,
+                "compress params: quality=$quality, scale=${if (scale > 0f) "${(scale * 100).toInt()}%" else "—"}, " +
+                        "targetSize=${targetWidth}x$targetHeight, crop=($cropX,$cropY ${cropW}x$cropH), rotation=${rotation}°, " +
+                        "inputSize=${inputInfo.width}x${inputInfo.height}"
+            )
+
             val nativeResult = if (targetWidth != 0 || targetHeight != 0 || scale > 0f
-                || cropW > 0 || cropH > 0 || fallbackToOriginalOnError
+                || cropW > 0 || cropH > 0 || rotation != 0 || fallbackToOriginalOnError
             ) {
                 nativeCompressEx(
                     inputPath, outputPath, quality,
                     targetWidth, targetHeight, scale,
                     cropX, cropY, cropW, cropH,
-                    fallbackToOriginalOnError
+                    rotation, fallbackToOriginalOnError
                 )
             } else {
                 nativeCompress(inputPath, outputPath, quality)
@@ -329,6 +350,7 @@ class JPEGCompressor private constructor() {
                     outputHeight = 0,
                     compressionRatio = 0f,
                     fallbackUsed = false,
+                    rotationApplied = 0,
                     errorMessage = errorMsg
                 )
             }
@@ -356,7 +378,8 @@ class JPEGCompressor private constructor() {
                 outputWidth = outputInfo.width,
                 outputHeight = outputInfo.height,
                 compressionRatio = compressionRatio,
-                fallbackUsed = fallbackUsed
+                fallbackUsed = fallbackUsed,
+                rotationApplied = rotation
             )
         } catch (e: Exception) {
             CompressResult(
@@ -371,6 +394,7 @@ class JPEGCompressor private constructor() {
                 outputHeight = 0,
                 compressionRatio = 0f,
                 fallbackUsed = false,
+                rotationApplied = 0,
                 errorMessage = e.message
             )
         }
@@ -411,6 +435,7 @@ class JPEGCompressor private constructor() {
      * @param cropY 裁剪区域左上角 Y
      * @param cropW 裁剪区域宽度
      * @param cropH 裁剪区域高度
+     * @param autoRotate 是否自动根据 EXIF Orientation 旋转图片回正常角度，默认 false
      * @param fallbackToOriginalOnError 压缩失败时是否使用原图
      * @param callback 压缩回调
      * @return Disposable 可用于取消任务
@@ -427,6 +452,7 @@ class JPEGCompressor private constructor() {
         cropY: Int = 0,
         cropW: Int = 0,
         cropH: Int = 0,
+        autoRotate: Boolean = false,
         fallbackToOriginalOnError: Boolean = false,
         callback: CompressCallback,
     ): Disposable {
@@ -435,7 +461,7 @@ class JPEGCompressor private constructor() {
                 inputPath, outputPath, quality,
                 targetWidth, targetHeight, scale,
                 cropX, cropY, cropW, cropH,
-                fallbackToOriginalOnError
+                autoRotate, fallbackToOriginalOnError
             )
         }
             .subscribeOn(Schedulers.io())
@@ -488,6 +514,7 @@ class JPEGCompressor private constructor() {
         cropY: Int = 0,
         cropW: Int = 0,
         cropH: Int = 0,
+        autoRotate: Boolean = false,
         fallbackToOriginalOnError: Boolean = false,
     ): Single<CompressResult> {
         return Single.fromCallable {
@@ -495,7 +522,7 @@ class JPEGCompressor private constructor() {
                 inputPath, outputPath, quality,
                 targetWidth, targetHeight, scale,
                 cropX, cropY, cropW, cropH,
-                fallbackToOriginalOnError
+                autoRotate, fallbackToOriginalOnError
             )
         }.subscribeOn(Schedulers.io())
     }
@@ -503,47 +530,23 @@ class JPEGCompressor private constructor() {
     // ==================== 获取图片信息 ====================
 
     /**
-     * 获取图片信息（路径输入）。
-     *
-     * ## 用法示例
-     * ```kotlin
-     * val info = compressor.getImageInfo("/sdcard/photo.jpg")
-     * println("尺寸: ${info.width}x${info.height}, 大小: ${info.fileSize} 字节")
-     * ```
-     *
-     * ## 注意事项
-     * - 优先使用 libjpeg-turbo 读取 JPEG 头（高效），失败时回退到 BitmapFactory
-     * - fileSize 来自文件系统，尺寸来自 JPEG 头或 BitmapFactory
+     * 获取图片信息（路径输入）。使用 BitmapFactory 仅读头，兼容性好。
      *
      * @param imagePath 图片文件路径
-     * @return ImageInfo 图片信息，失败时 width/height 为 0
+     * @return ImageInfo，失败时 width/height 为 0
      */
     fun getImageInfo(imagePath: String): ImageInfo {
         return try {
             val file = File(imagePath)
             val fileSize = if (file.exists()) file.length() else 0
-
-            val infoArray = nativeGetImageInfo(imagePath)
-            if (infoArray != null && infoArray.size >= 3) {
-                ImageInfo(
-                    width = infoArray[0].toInt(),
-                    height = infoArray[1].toInt(),
-                    fileSize = infoArray[2].coerceAtLeast(0),
-                    path = imagePath
-                )
-            } else {
-                // Native 失败，回退到 BitmapFactory
-                val options = BitmapFactory.Options().apply {
-                    inJustDecodeBounds = true
-                }
-                BitmapFactory.decodeFile(imagePath, options)
-                ImageInfo(
-                    width = options.outWidth,
-                    height = options.outHeight,
-                    fileSize = fileSize,
-                    path = imagePath
-                )
-            }
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(imagePath, options)
+            ImageInfo(
+                width = options.outWidth,
+                height = options.outHeight,
+                fileSize = fileSize,
+                path = imagePath
+            )
         } catch (_: Exception) {
             ImageInfo(0, 0, 0, imagePath)
         }
@@ -576,33 +579,40 @@ class JPEGCompressor private constructor() {
     }
 
     /**
-     * 获取图片信息（Uri 输入）。
-     *
-     * ## 用法示例
-     * ```kotlin
-     * val uri = Uri.parse("content://media/external/images/media/123")
-     * val info = compressor.getImageInfo(context, uri)
-     * ```
-     *
-     * ## 注意事项
-     * - 需要 Context 打开 ContentResolver 流
-     * - 会复制到临时文件后读取，读取后自动删除临时文件
-     * - 失败时返回 ImageInfo(0, 0, 0, "")
+     * 获取图片信息（Uri 输入）。先拷贝到临时文件再读；若仍失败则从 Uri 流读头（decodeByteArray）兜底。
      *
      * @param context Android Context
      * @param uri 图片 Uri
-     * @return ImageInfo 图片信息
+     * @return ImageInfo，失败时 width/height 为 0
      */
     fun getImageInfo(context: Context, uri: Uri): ImageInfo {
         val tempPath = copyUriToTempFile(context, uri, context.cacheDir)
-            ?: return ImageInfo(0, 0, 0, "")
+            ?: return getImageInfoFromUriStream(context, uri)
         return try {
-            getImageInfo(tempPath)
+            val info = getImageInfo(tempPath)
+            if (info.width > 0 && info.height > 0) info else getImageInfoFromUriStream(context, uri)
         } finally {
             try {
                 File(tempPath).delete()
             } catch (_: Exception) {
             }
+        }
+    }
+
+    /** 从 Uri 流读取宽高（仅读头，最多 256KB），用于 getImageInfo(context, uri) 兜底 */
+    private fun getImageInfoFromUriStream(context: Context, uri: Uri): ImageInfo {
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                val maxHeader = 256 * 1024
+                val buf = ByteArray(maxHeader)
+                val n = input.read(buf)
+                if (n <= 0) return@use ImageInfo(0, 0, 0, "")
+                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(buf, 0, n, opts)
+                ImageInfo(opts.outWidth, opts.outHeight, 0L, uri.toString())
+            } ?: ImageInfo(0, 0, 0, "")
+        } catch (_: Exception) {
+            ImageInfo(0, 0, 0, "")
         }
     }
 
@@ -633,6 +643,7 @@ class JPEGCompressor private constructor() {
      * @param cropY 裁剪区域左上角 Y
      * @param cropW 裁剪区域宽度
      * @param cropH 裁剪区域高度
+     * @param autoRotate 是否自动根据 EXIF Orientation 旋转图片回正常角度，默认 false（Bitmap 输入时通常为 false）
      * @param fallbackToOriginalOnError 压缩失败时是否使用原图
      * @return CompressResult 压缩结果
      */
@@ -648,6 +659,7 @@ class JPEGCompressor private constructor() {
         cropY: Int = 0,
         cropW: Int = 0,
         cropH: Int = 0,
+        autoRotate: Boolean = false,
         fallbackToOriginalOnError: Boolean = false,
     ): CompressResult {
         val tempFile = File(File(outputPath).parentFile, "tmp_in_${System.currentTimeMillis()}.jpg")
@@ -674,7 +686,7 @@ class JPEGCompressor private constructor() {
                 tempFile.absolutePath, outputPath, quality,
                 targetWidth, targetHeight, scale,
                 cropX, cropY, cropW, cropH,
-                fallbackToOriginalOnError
+                autoRotate, fallbackToOriginalOnError
             )
             result.copy(inputPath = "bitmap:${inputBitmap.width}x${inputBitmap.height}")
         } finally {
@@ -703,6 +715,7 @@ class JPEGCompressor private constructor() {
      * @param cropY 裁剪区域左上角 Y
      * @param cropW 裁剪区域宽度
      * @param cropH 裁剪区域高度
+     * @param autoRotate 是否自动根据 EXIF Orientation 旋转图片回正常角度，默认 false
      * @param fallbackToOriginalOnError 压缩失败时是否使用原图
      * @param callback 压缩回调
      * @return Disposable 可用于取消任务
@@ -719,6 +732,7 @@ class JPEGCompressor private constructor() {
         cropY: Int = 0,
         cropW: Int = 0,
         cropH: Int = 0,
+        autoRotate: Boolean = false,
         fallbackToOriginalOnError: Boolean = false,
         callback: CompressCallback,
     ): Disposable {
@@ -727,7 +741,7 @@ class JPEGCompressor private constructor() {
                 inputBitmap, outputPath, quality,
                 targetWidth, targetHeight, scale,
                 cropX, cropY, cropW, cropH,
-                fallbackToOriginalOnError
+                autoRotate, fallbackToOriginalOnError
             )
         }
             .subscribeOn(Schedulers.io())
@@ -759,6 +773,7 @@ class JPEGCompressor private constructor() {
         cropY: Int = 0,
         cropW: Int = 0,
         cropH: Int = 0,
+        autoRotate: Boolean = false,
         fallbackToOriginalOnError: Boolean = false,
     ): Single<CompressResult> {
         return Single.fromCallable {
@@ -766,7 +781,7 @@ class JPEGCompressor private constructor() {
                 inputBitmap, outputPath, quality,
                 targetWidth, targetHeight, scale,
                 cropX, cropY, cropW, cropH,
-                fallbackToOriginalOnError
+                autoRotate, fallbackToOriginalOnError
             )
         }.subscribeOn(Schedulers.io())
     }
@@ -799,6 +814,7 @@ class JPEGCompressor private constructor() {
      * @param cropY 裁剪区域左上角 Y
      * @param cropW 裁剪区域宽度
      * @param cropH 裁剪区域高度
+     * @param autoRotate 是否自动根据 EXIF Orientation 旋转图片回正常角度，默认 false
      * @param fallbackToOriginalOnError 压缩失败时是否使用原图
      * @return CompressResult 压缩结果
      */
@@ -815,6 +831,7 @@ class JPEGCompressor private constructor() {
         cropY: Int = 0,
         cropW: Int = 0,
         cropH: Int = 0,
+        autoRotate: Boolean = false,
         fallbackToOriginalOnError: Boolean = false,
     ): CompressResult {
         val tempPath =
@@ -838,7 +855,7 @@ class JPEGCompressor private constructor() {
                 tempPath, outputPath, quality,
                 targetWidth, targetHeight, scale,
                 cropX, cropY, cropW, cropH,
-                fallbackToOriginalOnError
+                autoRotate, fallbackToOriginalOnError
             )
         } finally {
             try {
@@ -867,6 +884,7 @@ class JPEGCompressor private constructor() {
      * @param cropY 裁剪区域左上角 Y
      * @param cropW 裁剪区域宽度
      * @param cropH 裁剪区域高度
+     * @param autoRotate 是否自动根据 EXIF Orientation 旋转图片回正常角度，默认 false
      * @param fallbackToOriginalOnError 压缩失败时是否使用原图
      * @param callback 压缩回调
      * @return Disposable 可用于取消任务
@@ -884,6 +902,7 @@ class JPEGCompressor private constructor() {
         cropY: Int = 0,
         cropW: Int = 0,
         cropH: Int = 0,
+        autoRotate: Boolean = false,
         fallbackToOriginalOnError: Boolean = false,
         callback: CompressCallback,
     ): Disposable {
@@ -892,7 +911,7 @@ class JPEGCompressor private constructor() {
                 context, inputUri, outputPath, quality,
                 targetWidth, targetHeight, scale,
                 cropX, cropY, cropW, cropH,
-                fallbackToOriginalOnError
+                autoRotate, fallbackToOriginalOnError
             )
         }
             .subscribeOn(Schedulers.io())
@@ -925,6 +944,7 @@ class JPEGCompressor private constructor() {
         cropY: Int = 0,
         cropW: Int = 0,
         cropH: Int = 0,
+        autoRotate: Boolean = false,
         fallbackToOriginalOnError: Boolean = false,
     ): Single<CompressResult> {
         return Single.fromCallable {
@@ -932,7 +952,7 @@ class JPEGCompressor private constructor() {
                 context, inputUri, outputPath, quality,
                 targetWidth, targetHeight, scale,
                 cropX, cropY, cropW, cropH,
-                fallbackToOriginalOnError
+                autoRotate, fallbackToOriginalOnError
             )
         }.subscribeOn(Schedulers.io())
     }
@@ -999,6 +1019,39 @@ class JPEGCompressor private constructor() {
         return CropRegion(cropX, cropY, cropW, cropH)
     }
 
+    /**
+     * 将裁剪区域对齐到 TurboJPEG 要求的 iMCU 边界（通常 16 像素），避免 tj3SetCroppingRegion 报错。
+     * 对齐方式：x、y 向下取整到 align 的倍数；w、h 向下取整到 align 的倍数且不小于 align。
+     *
+     * @param crop 原始裁剪区域
+     * @param imageWidth 图像宽度（旋转后的逻辑宽度）
+     * @param imageHeight 图像高度（旋转后的逻辑高度）
+     * @param align 对齐粒度，4:2:0 时为 16
+     * @return 对齐后的裁剪区域，若无需裁剪或对齐后无效则返回原 crop 或 (0,0,0,0)
+     */
+    fun alignCropRegionToMCU(
+        crop: CropRegion,
+        imageWidth: Int,
+        imageHeight: Int,
+        align: Int = 16,
+    ): CropRegion {
+        if (align <= 0 || crop.w <= 0 || crop.h <= 0) return crop
+        if (imageWidth <= 0 || imageHeight <= 0) return crop
+        val x = (crop.x / align) * align
+        val y = (crop.y / align) * align
+        val maxW = (imageWidth - x).coerceAtLeast(0)
+        val maxH = (imageHeight - y).coerceAtLeast(0)
+        var w = (crop.w / align) * align
+        var h = (crop.h / align) * align
+        if (w < align) w = align
+        if (h < align) h = align
+        if (w > maxW) w = (maxW / align) * align
+        if (h > maxH) h = (maxH / align) * align
+        if (w < align || h < align) return crop
+        if (x + w > imageWidth || y + h > imageHeight) return crop
+        return CropRegion(x, y, w, h)
+    }
+
     // ==================== 私有辅助方法 ====================
 
     /**
@@ -1014,6 +1067,32 @@ class JPEGCompressor private constructor() {
             temp.absolutePath
         } catch (_: Exception) {
             null
+        }
+    }
+
+
+    /**
+     * 从 EXIF 读取图片旋转角度（供示例或调用方在计算裁剪区域时使用「逻辑尺寸」）
+     *
+     * @param imagePath 图片路径
+     * @return 旋转角度（0=不旋转, 90=顺时针90度, 180=180度, 270=顺时针270度），读取失败返回 0
+     */
+    fun getExifRotation(imagePath: String): Int {
+        return try {
+            val exif = ExifInterface(imagePath)
+            val orientation = exif.getAttributeInt(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_NORMAL
+            )
+            when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> 90
+                ExifInterface.ORIENTATION_ROTATE_180 -> 180
+                ExifInterface.ORIENTATION_ROTATE_270 -> 270
+                else -> 0
+            }
+        } catch (e: Exception) {
+            Log.w(LOG_TAG, "Failed to read EXIF orientation: ${e.message}")
+            0
         }
     }
 }

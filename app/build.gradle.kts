@@ -38,11 +38,11 @@ dependencies {
     implementation(libs.material)
 
     implementation(libs.glide)
+    implementation(libs.cameraview)
     implementation(libs.rxjava3.rxandroid)
 
-    // JPEG压缩库
-    //implementation(project(":jpeg-compressor"))
-    implementation(files("libs/jpeg-compressor-1.0.3-release.aar"))
+    implementation(project(":jpeg-compressor"))
+    // implementation(files("libs/jpeg-compressor-1.0.4-release.aar"))
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
