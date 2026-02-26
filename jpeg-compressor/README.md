@@ -38,15 +38,8 @@
 
 ### 输出文件位置
 
-- **jpeg-compressor AAR**：`jpeg-compressor/build/outputs/aar/jpeg-compressor-release.aar`（或带版本号如 `jpeg-compressor-1.0.0.aar`）
-
-### 说明
-
-- 使用 `implementation(project(":jpeg-compressor"))` 时，**每次运行 app 都会从源码重新编译 jpeg-compressor**，不会使用预构建的 AAR。修改 jpeg-compressor 源码后，直接运行 app 即可生效，无需单独执行 `assembleRelease`。
-- 预构建的 AAR 仅在使用 `implementation(files("libs/xxx.aar"))` 等方式引用时才会被使用。
-- 需配置 Android SDK（`ANDROID_HOME` 环境变量或 `local.properties` 中的 `sdk.dir`）。
-
----
+- **jpeg-compressor AAR**：`jpeg-compressor/build/outputs/aar/jpeg-compressor-<版本号>-release.aar`（例如 `jpeg-compressor-1.0.5-release.aar`）
+- **Sources / Javadoc**：执行 `sourcesJar`、`javadocJar` 可在 `build/libs/` 得到 `-sources.jar`、`-javadoc.jar`，供调用方在 IDE 中附加以查看方法注释。
 
 ## 功能特性
 
@@ -65,7 +58,6 @@
 在 `settings.gradle.kts` 中：
 
 ```kotlin
-include(":app")
 include(":jpeg-compressor")
 ```
 
@@ -100,11 +92,10 @@ dependencies {
    }
    ```
 
-4. **依赖说明**：AAR 已包含 RxJava3，若主项目已有 RxJava3 可排除传递依赖：
+4. **依赖说明**：本库对 RxJava3、ExifInterface 使用 `compileOnly`，**AAR 不包含**上述依赖。调用方若使用异步/Rx 或 EXIF 自动旋转，需自行添加：
    ```kotlin
-   implementation("com.xxx:jpeg-compressor:1.0.0") {
-       exclude(group = "io.reactivex.rxjava3", module = "rxjava")
-   }
+   implementation("io.reactivex.rxjava3:rxandroid:3.0.2")
+   implementation("androidx.exifinterface:exifinterface:1.4.2")
    ```
 
 ---
@@ -184,45 +175,6 @@ val info = compressor.getImageInfo("/path/to/image.jpg")
 // info.width, info.height, info.fileSize, info.path（尺寸与 fileSize 由 BitmapFactory 仅读头/文件系统得到）
 ```
 
-### 6. 图片选择（需配合 registerForActivityResult）
-
-**重要**：`registerForActivityResult` 必须在 Fragment/Activity **创建前**调用（init 块或 onCreate 中），不能放在点击事件里。
-
-```kotlin
-// 在 Fragment 中
-class MyFragment : Fragment() {
-
-    private val pickImageLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            result.data?.data?.let { uri ->
-                val path = ImagePicker.instance.getFilePathFromUri(requireActivity(), uri)
-                // 处理 path
-            }
-        }
-    }
-
-    // 点击时启动
-    binding.btnSelect.setOnClickListener {
-        pickImageLauncher.launch(ImagePicker.instance.createPickImageIntent())
-    }
-}
-```
-
-### 7. 系统相册预览（需 FileProvider）
-
-```kotlin
-// 传入应用 FileProvider 的 authority（与 AndroidManifest 中一致）
-ImagePicker.instance.openImageInGallery(
-    context,
-    "/path/to/image.jpg",
-    "${context.packageName}.fileprovider"
-)
-```
-
----
-
 ## 常见问题与说明
 
 ### 1. 为什么“再次压缩”后压缩率会变成负数？体积是变大了吗？
@@ -239,7 +191,7 @@ ImagePicker.instance.openImageInGallery(
 
 - 已使用 **TurboJPEG API**（`tjCompress2` / `tjDecompress2`）。
 - 已使用 **TJSAMP_420** 色度子采样（在观感可接受下明显减小体积）。
-- 已使用 **TJFLAG_ACCURATEDCT**（更精确的 DCT，画质与体积平衡较好）。
+- 已使用 **TJFLAG_FASTDCT**（快速 DCT，速度优先；若需更好画质可改为 ACCURATEDCT）。
 
 **可进一步考虑的方向：**
 
@@ -249,7 +201,7 @@ ImagePicker.instance.openImageInGallery(
 | **SIMD** | 用于**加速**编解码，不直接减小体积。当前构建中 SIMD 已关闭（`jconfig.h` 未定义 `WITH_SIMD`）。若在 CMake 中为各 ABI 加入对应 simd 源文件并开启 SIMD，可显著提升压缩/解压速度。 |
 | **质量/子采样** | 在现有 TurboJPEG 上，可尝试略降 quality（如 80）或保持 420，在体积与画质间做权衡。 |
 
-总结：在**不改为 libjpeg 标准 API** 的前提下，当前 TurboJPEG + 420 + ACCURATEDCT 已是较优组合；要进一步减体积可考虑接入 optimize_coding（需改实现），要提速可开启 SIMD。
+总结：在**不改为 libjpeg 标准 API** 的前提下，当前 TurboJPEG + 420 + FASTDCT 已是速度与体积的较优组合；要进一步减体积可考虑接入 optimize_coding（需改实现），要提速可开启 SIMD。
 
 ### 3. 是否支持超大图？最大支持多大？会不会 OOM？
 
@@ -300,20 +252,22 @@ JPEGCompressor.instance.compressRx(inputPath, outputPath, 80)
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| success | Boolean | 是否成功 |
-| inputPath | String | 输入路径 |
+| success | Boolean | 是否成功（含 fallback 成功） |
+| inputPath | String | 输入路径（Bitmap 输入时为 "bitmap:宽x高"） |
 | outputPath | String | 输出路径 |
 | inputSize | Long | 原始大小（字节） |
 | outputSize | Long | 压缩后大小（字节） |
 | compressionRatio | Float | 压缩率（%），再次压缩已压缩图可能为负数表示体积增大 |
 | inputWidth/Height | Int | 原始尺寸 |
 | outputWidth/Height | Int | 压缩后尺寸 |
+| fallbackUsed | Boolean | 是否使用了 fallback（压缩失败时复制原图） |
+| rotationApplied | Int | 若启用自动旋转且 EXIF 有旋转信息，则为实际应用的角度（90/180/270），否则为 0 |
 | errorMessage | String? | 失败时错误信息 |
 
 ---
 
 ## 版本要求
 
-- **minSdk**：库本身可支持 **21**（NDK、Context、File、BitmapFactory 等均可用）；与主工程 `minSdk` 一致即可（如 26）。
+- minSdk：21
 - Kotlin 1.9+
 - NDK 21+
