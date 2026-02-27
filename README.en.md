@@ -92,6 +92,7 @@ The library logs compression parameters, duration, and memory usage. Filter by t
 
 - **Library details** (build, integration, examples, FAQ, CompressResult, version requirements): [jpeg-compressor/README.md](jpeg-compressor/README.md) (中文) | [jpeg-compressor/README.en.md](jpeg-compressor/README.en.md) (English).
 - **app** in this repo is a sample; run it to see compression, pick image, save to gallery.
+- **libjpeg-turbo modifications & patching steps**: see [jpeg-compressor/THIRD_PARTY.md](jpeg-compressor/THIRD_PARTY.md) for how to apply files under `libjpeg-turbo-patches` to the upstream libjpeg-turbo source.
 
 ---
 

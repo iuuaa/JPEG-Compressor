@@ -94,6 +94,7 @@ if (result.success) {
 - **库模块详细说明**（编译命令、集成方式、完整示例、常见问题、CompressResult 字段说明、版本要求）：见 [jpeg-compressor/README.md](jpeg-compressor/README.md)。
 - **集成到已有 App**：见 [jpeg-compressor/INTEGRATION_GUIDE.md](jpeg-compressor/INTEGRATION_GUIDE.md)（若存在）。
 - 本仓库中的 **app** 为示例应用，可直接运行查看压缩、选择图片、保存相册等用法。
+- **libjpeg-turbo 修改与覆盖步骤**：见 [jpeg-compressor/THIRD_PARTY.md](jpeg-compressor/THIRD_PARTY.md)，其中说明了如何将 `libjpeg-turbo-patches` 目录下的文件覆盖到上游 libjpeg-turbo 源码。
 
 ---
 
