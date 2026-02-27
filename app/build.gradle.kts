@@ -40,8 +40,8 @@ dependencies {
     implementation(libs.glide)
     implementation(libs.cameraview)
 
-    // implementation(project(":jpeg-compressor"))
-    implementation(libs.jpeg.compressor)
+    implementation(project(":jpeg-compressor"))
+    // implementation(libs.jpeg.compressor)
     implementation(libs.rxjava3.rxandroid)
     implementation(libs.androidx.exifinterface)
 

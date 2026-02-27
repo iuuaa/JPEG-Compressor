@@ -23,6 +23,12 @@ dependencies {
 
 ### 2. 本地 Module 依赖
 
+在工程根目录 `settings.gradle.kts` 中包含：
+
+```kotlin
+include(":jpeg-compressor")
+```
+
 在 app 的 `build.gradle.kts` 中：
 
 ```kotlin
@@ -30,24 +36,6 @@ dependencies {
     implementation(project(":jpeg-compressor"))
 }
 ```
-
-### 3. 本地 AAR 文件
-
-1. 构建 AAR：  
-   `./gradlew :jpeg-compressor:assembleRelease`  
-   产物路径：`jpeg-compressor/build/outputs/aar/jpeg-compressor-<版本号>-release.aar`。
-
-2. 将 AAR 复制到目标工程的 `app/libs/`（或你自定义的目录）。
-
-3. 在 app 的 `build.gradle.kts` 中：
-
-```kotlin
-dependencies {
-    implementation(files("libs/jpeg-compressor-1.0.5-release.aar"))
-}
-```
-
-使用 AAR 时，本库**不**包含 RxJava3 / ExifInterface，若用到异步、Rx 或 EXIF 旋转，需在宿主工程中自行添加上述依赖。
 
 ---
 
@@ -85,12 +73,19 @@ if (result.success) {
 | `calculateCropRegionForAspectRatio(w, h, aspectW, aspectH)` | 按比例居中裁剪区域 |
 | `alignCropRegionToMCU(crop, …)` | 将裁剪区域对齐到 MCU |
 | `getExifRotation(path)` | 读取 EXIF 旋转角度 |
-| `ImagePicker.instance.createPickImageIntent()` | 选择图片 Intent |
-| `ImagePicker.instance.getFilePathFromUri(activity, uri)` | Uri → 本地路径 |
-| `ImagePicker.instance.saveImageToGallery(context, path, displayName)` | 保存到系统相册（Android 10+） |
 
 常用参数（各 `compress*` 方法均有）：`quality`、`targetWidth`/`targetHeight`、`scale`、`cropX/Y/W/H`、`autoRotate`、`fallbackToOriginalOnError`。  
 返回结果见 `JPEGCompressor.CompressResult`（含 `success`、`compressionRatio`、`fallbackUsed`、`errorMessage` 等）。
+
+---
+
+## 日志查看
+
+压缩过程会输出耗时、内存和参数等日志，便于调试。在 Logcat 中按 tag 过滤可只看库的日志：
+
+- **Tag**：`JPEGCompressor`
+- **命令行**：`adb logcat -s JPEGCompressor`
+- **Android Studio Logcat**：在过滤框输入 `tag:JPEGCompressor` 或选择 tag 为 `JPEGCompressor`
 
 ---
 
@@ -99,12 +94,13 @@ if (result.success) {
 - **库模块详细说明**（编译命令、集成方式、完整示例、常见问题、CompressResult 字段说明、版本要求）：见 [jpeg-compressor/README.md](jpeg-compressor/README.md)。
 - **集成到已有 App**：见 [jpeg-compressor/INTEGRATION_GUIDE.md](jpeg-compressor/INTEGRATION_GUIDE.md)（若存在）。
 - 本仓库中的 **app** 为示例应用，可直接运行查看压缩、选择图片、保存相册等用法。
+- **libjpeg-turbo 修改与覆盖步骤**：见 [jpeg-compressor/THIRD_PARTY.md](jpeg-compressor/THIRD_PARTY.md)，其中说明了如何将 `libjpeg-turbo-patches` 目录下的文件覆盖到上游 libjpeg-turbo 源码。
 
 ---
 
 ## 版本要求
 
-- **minSdk**：21（与主工程一致即可）
+- **minSdk**：21
 - **Kotlin**：1.9+
 - **NDK**：21+
 
