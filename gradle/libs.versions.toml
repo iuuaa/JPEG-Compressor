@@ -1,6 +1,7 @@
 [versions]
 agp = "9.0.1"
 dokka = "2.1.0"
+mavenPublish = "0.36.0"
 junit = "4.13.2"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
@@ -23,8 +24,10 @@ androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterfa
 glide = { group = "com.github.bumptech.glide", name = "glide", version = "5.0.5" }
 rxjava3-rxandroid = { group = "io.reactivex.rxjava3", name = "rxandroid", version.ref = "rxandroid" }
 cameraview = { group = "com.otaliastudios", name = "cameraview", version.ref = "cameraview" }
+jpeg-compressor = { group = "io.github.iuuaa", name = "jpeg-compressor", version = "1.0.5" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
+maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "mavenPublish" }

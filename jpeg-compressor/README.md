@@ -1,6 +1,8 @@
+[English](README.en.md) | 中文
+
 # JPEG Compressor Library
 
-基于 [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo) 的 Android 图片压缩库，支持 JPEG 无损/有损压缩。
+基于 [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo) 的 Android 图片压缩库，支持 JPEG 无损/有损压缩。对 libjpeg-turbo 的修改与新增文件说明见 [THIRD_PARTY.md](THIRD_PARTY.md)。
 
 ---
 
@@ -78,17 +80,16 @@ dependencies {
 
 2. **AAR 输出路径**：
    ```
-   jpeg-compressor/build/outputs/aar/jpeg-compressor-release.aar
+   jpeg-compressor/build/outputs/aar/jpeg-compressor-<版本号>-release.aar
    ```
+   例如 `jpeg-compressor-1.0.5-release.aar`（版本号来自 `gradle/libs.versions.toml` 的 `versionName`）。
 
 3. **集成到项目**：
    - 将 AAR 复制到目标项目的 `app/libs/` 目录
    - 在 `build.gradle.kts` 中：
    ```kotlin
    dependencies {
-       implementation(files("libs/jpeg-compressor-release.aar"))
-       // 或使用 flatDir
-       implementation(name: "jpeg-compressor-release", ext: "aar")
+       implementation(files("libs/jpeg-compressor-1.0.5-release.aar"))
    }
    ```
 
@@ -268,6 +269,21 @@ JPEGCompressor.instance.compressRx(inputPath, outputPath, 80)
 
 ## 版本要求
 
-- minSdk：21
-- Kotlin 1.9+
-- NDK 21+
+| 项目 | 要求 | 说明 |
+|------|------|------|
+| **Android minSdk** | 21 | 与主工程保持一致即可 |
+| **Android compileSdk** | 36 | 本库当前配置，主工程 ≥ 即可 |
+| **Kotlin** | 1.9+ | 与 AGP 兼容的 Kotlin 版本 |
+| **JDK** | 17 | 本库 `compileOptions` 为 17 |
+| **Gradle** | 8.x / 9.x | 与 AGP 9.x 兼容 |
+| **Android Gradle Plugin** | 9.x | 见根项目 `libs.versions.toml` 的 `agp` |
+| **NDK** | 21+（推荐 29.x） | 编译 native 所需，本库 `ndkVersion` 为 29.0.x |
+
+- 若以 **Module 依赖**方式集成，主工程需满足上述 Gradle / AGP / JDK 要求。
+- 若仅使用 **AAR**，仅需主工程 minSdk ≥ 21 及 Kotlin 运行时即可。
+
+---
+
+## License
+
+本库采用 **Apache License 2.0**。详见项目根目录 [LICENSE](../LICENSE)。

@@ -1,3 +1,5 @@
+[English](README.en.md) | 中文
+
 # JPEG Compressor
 
 基于 [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo) 的 Android JPEG 图片压缩库，支持同步/异步/RxJava3、路径/Bitmap/Uri 输入、缩放裁剪与 EXIF 自动旋转。
@@ -12,14 +14,12 @@
 
 ```kotlin
 dependencies {
-    implementation("com.iuuaa:jpeg-compressor:1.0.5")
+    implementation("io.github.iuuaa:jpeg-compressor:1.0.5")
     // 若使用异步 / Rx / EXIF 自动旋转，需同时添加：
     implementation("io.reactivex.rxjava3:rxandroid:3.0.2")
     implementation("androidx.exifinterface:exifinterface:1.4.2")
 }
 ```
-
-将 `com.iuuaa` 替换为你发布到 Maven Central 时使用的 **groupId**（若使用本仓库自行发布，请与 `jpeg-compressor/build.gradle.kts` 中 `publishing.publications` 的 `groupId` 一致）。
 
 ### 2. 本地 Module 依赖
 
@@ -112,4 +112,5 @@ if (result.success) {
 
 ## License
 
-见项目根目录 LICENSE 文件（若有）。
+本项目采用 **Apache License 2.0** 开源协议。  
+详见 [LICENSE](LICENSE) 文件。您在使用、复制、修改及分发本软件时须遵守该协议。
