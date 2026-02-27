@@ -14,7 +14,7 @@ import androidx.core.content.FileProvider
 import com.bumptech.glide.Glide
 import com.example.jpegcompressor.databinding.ActivityMainBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.iuuaa.jpegcompressor.ImagePicker
+import com.example.jpegcompressor.ImagePicker
 import com.iuuaa.jpegcompressor.JPEGCompressor
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import java.io.File
@@ -26,6 +26,9 @@ class MainActivity : AppCompatActivity() {
     private var originalImagePath: String? = null
     private var originalImageUri: Uri? = null
     private var compressedImagePath: String? = null
+
+    /** 系统相机拍照时使用的输出文件，用于 result 回调中取路径 */
+    private var systemCameraOutputFile: File? = null
 
     private val compressor = JPEGCompressor.instance
     private val imagePicker = ImagePicker.instance
@@ -67,6 +70,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val systemCameraLauncher = registerForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            systemCameraOutputFile?.absolutePath?.let { imagePath ->
+                originalImagePath = imagePath
+                originalImageUri = null
+                loadOriginalImage(imagePath, null)
+                binding.btnCompress.isEnabled = true
+                if (!binding.switchAutoRotate.isChecked) {
+                    binding.switchAutoRotate.isChecked = true
+                }
+            } ?: Toast.makeText(this, "无法获取照片路径", Toast.LENGTH_SHORT).show()
+        }
+        systemCameraOutputFile = null
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -85,11 +105,19 @@ class MainActivity : AppCompatActivity() {
         binding.tilScalePercent.visibility = if (isScalePercent) View.VISIBLE else View.GONE
     }
 
+    /** 使用系统相机拍照，照片写入缓存文件后可用于压缩 */
+    private fun launchSystemCamera() {
+        val outputFile = File(cacheDir, "system_camera_${System.currentTimeMillis()}.jpg")
+        val uri: Uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", outputFile)
+        systemCameraOutputFile = outputFile
+        systemCameraLauncher.launch(uri)
+    }
+
     private fun setupClickListeners() {
         binding.btnSelectImage.setOnClickListener {
             MaterialAlertDialogBuilder(this)
                 .setTitle("选择图片")
-                .setItems(arrayOf("从相册选择", "从相机拍摄")) { _, which ->
+                .setItems(arrayOf("从相册选择", "自定义相机拍摄", "系统相机拍照")) { _, which ->
                     when (which) {
                         0 -> pickImageLauncher.launch(ImagePicker.createPickImageIntent())
                         1 -> cameraLauncher.launch(
@@ -98,6 +126,7 @@ class MainActivity : AppCompatActivity() {
                                 CameraActivity::class.java
                             )
                         )
+                        2 -> launchSystemCamera()
                     }
                 }
                 .show()
@@ -162,6 +191,13 @@ class MainActivity : AppCompatActivity() {
         val cropW: Int
         val cropH: Int
         when (binding.rgCropMode.checkedRadioButtonId) {
+            R.id.rbCropNone -> {
+                // 不裁剪：传 0 给库，库内 cropW/cropH 为 0 时仅做质量压缩
+                cropX = 0
+                cropY = 0
+                cropW = 0
+                cropH = 0
+            }
             R.id.rbCrop1x1 -> {
                 val crop =
                     compressor.alignCropRegionToMCU(

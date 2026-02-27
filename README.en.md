@@ -23,6 +23,12 @@ dependencies {
 
 ### 2. Local module
 
+In root `settings.gradle.kts`:
+
+```kotlin
+include(":jpeg-compressor")
+```
+
 In app `build.gradle.kts`:
 
 ```kotlin
@@ -30,21 +36,6 @@ dependencies {
     implementation(project(":jpeg-compressor"))
 }
 ```
-
-### 3. Local AAR
-
-1. Build: `./gradlew :jpeg-compressor:assembleRelease`  
-   Output: `jpeg-compressor/build/outputs/aar/jpeg-compressor-<version>-release.aar`
-2. Copy the AAR to your app’s `libs/` (or custom directory).
-3. In app `build.gradle.kts`:
-
-```kotlin
-dependencies {
-    implementation(files("libs/jpeg-compressor-1.0.5-release.aar"))
-}
-```
-
-When using the AAR, add RxAndroid and ExifInterface yourself if you use async/Rx or EXIF rotation.
 
 ---
 
@@ -81,12 +72,19 @@ if (result.success) {
 | `calculateCropRegionForAspectRatio(w, h, aspectW, aspectH)` | Center crop by aspect ratio |
 | `alignCropRegionToMCU(crop, …)` | Align crop to MCU |
 | `getExifRotation(path)` | EXIF rotation angle |
-| `ImagePicker.instance.createPickImageIntent()` | Pick image Intent |
-| `ImagePicker.instance.getFilePathFromUri(activity, uri)` | Uri → file path |
-| `ImagePicker.instance.saveImageToGallery(context, path, displayName)` | Save to gallery (Android 10+) |
 
 Common parameters: `quality`, `targetWidth`/`targetHeight`, `scale`, `cropX/Y/W/H`, `autoRotate`, `fallbackToOriginalOnError`.  
 Result: `JPEGCompressor.CompressResult` (`success`, `compressionRatio`, `fallbackUsed`, `errorMessage`, etc.).
+
+---
+
+## Log viewing
+
+The library logs compression parameters, duration, and memory usage. Filter by tag in Logcat:
+
+- **Tag**: `JPEGCompressor`
+- **Command line**: `adb logcat -s JPEGCompressor`
+- **Android Studio Logcat**: enter `tag:JPEGCompressor` in the filter box, or filter by tag `JPEGCompressor`
 
 ---
 
@@ -99,7 +97,7 @@ Result: `JPEGCompressor.CompressResult` (`success`, `compressionRatio`, `fallbac
 
 ## Version requirements
 
-- **minSdk**: 21 (match your app)
+- **minSdk**: 21
 - **Kotlin**: 1.9+
 - **NDK**: 21+
 

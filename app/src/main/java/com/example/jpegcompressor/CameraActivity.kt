@@ -47,11 +47,6 @@ class CameraActivity : AppCompatActivity() {
 
         binding.cameraView.setLifecycleOwner(this)
 
-        binding.btnCancel.setOnClickListener {
-            setResult(RESULT_CANCELED)
-            finish()
-        }
-
         binding.btnRotate.setOnClickListener {
             val current = requestedOrientation
             requestedOrientation = when {

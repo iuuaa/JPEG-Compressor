@@ -6,43 +6,6 @@ Android image compression library based on [libjpeg-turbo](https://github.com/li
 
 ---
 
-## Build commands
-
-### Build library (Release AAR)
-
-```bash
-./gradlew :jpeg-compressor:assembleRelease
-```
-
-### Build full project (with app)
-
-```bash
-./gradlew assembleRelease
-```
-
-### Debug build
-
-```bash
-./gradlew assembleDebug
-```
-
-### Windows (PowerShell / CMD)
-
-```powershell
-.\gradlew.bat :jpeg-compressor:assembleRelease
-```
-
-### Without Gradle Daemon
-
-```bash
-./gradlew assembleRelease --no-daemon
-```
-
-### Output locations
-
-- **AAR**: `jpeg-compressor/build/outputs/aar/jpeg-compressor-<version>-release.aar` (e.g. `jpeg-compressor-1.0.5-release.aar`)
-- **Sources / Javadoc**: Run `sourcesJar` and `javadocJar` to get `-sources.jar` and `-javadoc.jar` in `build/libs/` for IDE attachment.
-
 ## Features
 
 - libjpeg-turbo 3.x high-performance compression
@@ -71,27 +34,27 @@ dependencies {
 }
 ```
 
-### Option 2: AAR
+### Option 2: Maven Central
 
-1. **Build AAR**:
-   ```bash
-   ./gradlew :jpeg-compressor:assembleRelease
-   ```
+In root `settings.gradle.kts` make sure:
 
-2. **Output path**: `jpeg-compressor/build/outputs/aar/jpeg-compressor-<version>-release.aar` (version from `gradle/libs.versions.toml`).
+```kotlin
+repositories {
+    mavenCentral()
+    // ...
+}
+```
 
-3. **Add to project**: Copy AAR to `app/libs/`, then:
-   ```kotlin
-   dependencies {
-       implementation(files("libs/jpeg-compressor-1.0.5-release.aar"))
-   }
-   ```
+In the app `build.gradle.kts`:
 
-4. **Optional dependencies**: The library uses `compileOnly` for RxJava3 and ExifInterface. If you use async/Rx or EXIF rotation, add:
-   ```kotlin
-   implementation("io.reactivex.rxjava3:rxandroid:3.0.2")
-   implementation("androidx.exifinterface:exifinterface:1.4.2")
-   ```
+```kotlin
+dependencies {
+    implementation("io.github.iuuaa:jpeg-compressor:1.0.5")
+    // If you use async/Rx or EXIF rotation (library uses compileOnly):
+    implementation("io.reactivex.rxjava3:rxandroid:3.0.2")
+    implementation("androidx.exifinterface:exifinterface:1.4.2")
+}
+```
 
 ---
 
@@ -162,22 +125,9 @@ val info = compressor.getImageInfo("/path/to/image.jpg")
 // info.width, info.height, info.fileSize, info.path
 ```
 
-## FAQ
+### 6. Log viewing
 
-### 1. Why does compression ratio go negative when re-compressing?
-
-**Negative ratio means the output is larger than the input.** First compression already quantized and entropy-coded the image. Re-compressing decodes to RGB and re-encodes; the second pass is usually less efficient, so size can increase. Prefer compressing originals once; if you must re-compress, lower quality to force smaller size (with more quality loss).
-
-### 2. Can compression be improved further?
-
-**Current**: TurboJPEG API, TJSAMP_420, TJFLAG_FASTDCT (speed-focused). **Possible**: optimize_coding (needs libjpeg standard API, not exposed by TurboJPEG), SIMD for speed, or tweak quality/subsampling.
-
-### 3. Max image size? OOM?
-
-- **Limit**: No side above **8192** pixels, total pixels ≤ 8192×8192. See `JPEGCompressor.MAX_DIMENSION`.
-- **OOM**: Compression allocates width×height×3 RGB buffer (~192MB at 8192×8192). Over limit returns error -2 (`JPEGCompressor.ERROR_IMAGE_TOO_LARGE`). For larger images, scale or process in chunks first.
-
----
+Compression logs use tag `JPEGCompressor`. Command line: `adb logcat -s JPEGCompressor`; Android Studio Logcat filter: `tag:JPEGCompressor`.
 
 ## Full example
 

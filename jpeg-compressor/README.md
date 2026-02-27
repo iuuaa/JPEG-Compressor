@@ -6,43 +6,6 @@
 
 ---
 
-## 编译命令
-
-### 编译 jpeg-compressor 库（Release AAR）
-
-```bash
-./gradlew :jpeg-compressor:assembleRelease
-```
-
-### 编译整个项目（含 app）
-
-```bash
-./gradlew assembleRelease
-```
-
-### 编译 Debug 版本（调试用）
-
-```bash
-./gradlew assembleDebug
-```
-
-### Windows（PowerShell / CMD）
-
-```powershell
-.\gradlew.bat :jpeg-compressor:assembleRelease
-```
-
-### 不使用 Gradle Daemon
-
-```bash
-./gradlew assembleRelease --no-daemon
-```
-
-### 输出文件位置
-
-- **jpeg-compressor AAR**：`jpeg-compressor/build/outputs/aar/jpeg-compressor-<版本号>-release.aar`（例如 `jpeg-compressor-1.0.5-release.aar`）
-- **Sources / Javadoc**：执行 `sourcesJar`、`javadocJar` 可在 `build/libs/` 得到 `-sources.jar`、`-javadoc.jar`，供调用方在 IDE 中附加以查看方法注释。
-
 ## 功能特性
 
 - ✅ 基于 libjpeg-turbo 3.x 高性能压缩
@@ -71,33 +34,27 @@ dependencies {
 }
 ```
 
-### 方式二：使用 AAR
+### 方式二：Maven Central
 
-1. **生成 AAR**：
-   ```bash
-   ./gradlew :jpeg-compressor:assembleRelease
-   ```
+在宿主工程根目录 `settings.gradle.kts` 的 `dependencyResolutionManagement.repositories` 中确保包含：
 
-2. **AAR 输出路径**：
-   ```
-   jpeg-compressor/build/outputs/aar/jpeg-compressor-<版本号>-release.aar
-   ```
-   例如 `jpeg-compressor-1.0.5-release.aar`（版本号来自 `gradle/libs.versions.toml` 的 `versionName`）。
+```kotlin
+repositories {
+    mavenCentral()
+    // ...
+}
+```
 
-3. **集成到项目**：
-   - 将 AAR 复制到目标项目的 `app/libs/` 目录
-   - 在 `build.gradle.kts` 中：
-   ```kotlin
-   dependencies {
-       implementation(files("libs/jpeg-compressor-1.0.5-release.aar"))
-   }
-   ```
+在 app 的 `build.gradle.kts` 中：
 
-4. **依赖说明**：本库对 RxJava3、ExifInterface 使用 `compileOnly`，**AAR 不包含**上述依赖。调用方若使用异步/Rx 或 EXIF 自动旋转，需自行添加：
-   ```kotlin
-   implementation("io.reactivex.rxjava3:rxandroid:3.0.2")
-   implementation("androidx.exifinterface:exifinterface:1.4.2")
-   ```
+```kotlin
+dependencies {
+    implementation("io.github.iuuaa:jpeg-compressor:1.0.5")
+    // 若使用异步 / Rx / EXIF 自动旋转，需同时添加（库内为 compileOnly）：
+    implementation("io.reactivex.rxjava3:rxandroid:3.0.2")
+    implementation("androidx.exifinterface:exifinterface:1.4.2")
+}
+```
 
 ---
 
@@ -176,42 +133,9 @@ val info = compressor.getImageInfo("/path/to/image.jpg")
 // info.width, info.height, info.fileSize, info.path（尺寸与 fileSize 由 BitmapFactory 仅读头/文件系统得到）
 ```
 
-## 常见问题与说明
+### 6. 日志查看
 
-### 1. 为什么“再次压缩”后压缩率会变成负数？体积是变大了吗？
-
-**是的，负压缩率表示输出文件比输入更大。**
-
-- **原因**：第一次压缩时，原图已被量化并做了 Huffman 熵编码，文件已经较优。再次压缩时流程是：**解码 JPEG → 得到 RGB → 再按新 quality 编码**。第二次编码面对的是“已损失过”的像素，量化+熵编码效率通常不如第一次，所以**体积常会变大**，压缩率就会是负数。
-- **结论**：对**已经压缩过的照片**再压一遍，往往既损画质又增体积，不推荐。建议只对**原图**做一次压缩；若必须二次压缩，可**降低 quality**（如 70、60）强制缩小体积，但画质会进一步下降。
-- **界面**：当压缩率为负时，示例 App 会显示为「体积增大: X%」，并提示「再次压缩已压缩的图片常会变大」。
-
-### 2. 压缩效果还能再优化吗？optimize_coding、SIMD、TurboJPEG 等
-
-**当前实现：**
-
-- 已使用 **TurboJPEG API**（`tjCompress2` / `tjDecompress2`）。
-- 已使用 **TJSAMP_420** 色度子采样（在观感可接受下明显减小体积）。
-- 已使用 **TJFLAG_FASTDCT**（快速 DCT，速度优先；若需更好画质可改为 ACCURATEDCT）。
-
-**可进一步考虑的方向：**
-
-| 方向 | 说明 |
-|------|------|
-| **optimize_coding** | 可优化 Huffman 表，同画质下略减小体积。需使用 libjpeg **标准 API**（如 `jpeg_set_quality` + `optimize_coding`），**TurboJPEG 未暴露该选项**，若要使用需改为基于 libjpeg 的压缩流程。 |
-| **SIMD** | 用于**加速**编解码，不直接减小体积。当前构建中 SIMD 已关闭（`jconfig.h` 未定义 `WITH_SIMD`）。若在 CMake 中为各 ABI 加入对应 simd 源文件并开启 SIMD，可显著提升压缩/解压速度。 |
-| **质量/子采样** | 在现有 TurboJPEG 上，可尝试略降 quality（如 80）或保持 420，在体积与画质间做权衡。 |
-
-总结：在**不改为 libjpeg 标准 API** 的前提下，当前 TurboJPEG + 420 + FASTDCT 已是速度与体积的较优组合；要进一步减体积可考虑接入 optimize_coding（需改实现），要提速可开启 SIMD。
-
-### 3. 是否支持超大图？最大支持多大？会不会 OOM？
-
-- **支持上限**：单边像素不超过 **8192**（宽或高任一超过即拒绝），且总像素数不超过 8192×8192。与 C++ 中 `MAX_DIMENSION` 一致，Kotlin 可通过 `JPEGCompressor.MAX_DIMENSION` 获取。
-- **OOM 风险**：压缩时会分配 **width×height×3** 的 RGB 缓冲区（约 8192×8192×3 ≈ 192MB）。若放宽上限，大图在低内存设备上易 OOM，因此超过上述尺寸会**直接拒绝压缩**并返回错误。
-- **错误码**：尺寸过大时 native 返回 **-2**，Kotlin 层会得到 `success == false` 且 `errorMessage` 为「图片尺寸过大，存在 OOM 风险（单边不超过 8192 像素）」；常量 `JPEGCompressor.ERROR_IMAGE_TOO_LARGE == -2`。
-- **建议**：单边尽量不超过 8192；若需处理更大图，需自行先缩放或分块处理后再压缩。
-
----
+压缩过程会输出参数与耗时等日志，tag 为 `JPEGCompressor`。命令行查看：`adb logcat -s JPEGCompressor`；Android Studio Logcat 过滤：`tag:JPEGCompressor`。
 
 ## 完整示例
 
