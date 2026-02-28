@@ -11,8 +11,8 @@ cameraview = "2.7.2"
 minSdk = "21"
 compileSdk = "36"
 
-versionCode = "105"
-versionName = "1.0.5"
+versionCode = "106"
+versionName = "1.0.6"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -24,7 +24,7 @@ androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterfa
 glide = { group = "com.github.bumptech.glide", name = "glide", version = "5.0.5" }
 rxjava3-rxandroid = { group = "io.reactivex.rxjava3", name = "rxandroid", version.ref = "rxandroid" }
 cameraview = { group = "com.otaliastudios", name = "cameraview", version.ref = "cameraview" }
-jpeg-compressor = { group = "io.github.iuuaa", name = "jpeg-compressor", version = "1.0.5" }
+jpeg-compressor = { group = "io.github.iuuaa", name = "jpeg-compressor", version = "1.0.6" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -14,12 +14,14 @@ Ensure `mavenCentral()` is in `dependencyResolutionManagement.repositories` in t
 
 ```kotlin
 dependencies {
-    implementation("io.github.iuuaa:jpeg-compressor:1.0.5")
+    implementation("io.github.iuuaa:jpeg-compressor:1.0.6")
     // If using async / Rx / EXIF rotation, add:
     implementation("io.reactivex.rxjava3:rxandroid:3.0.2")
     implementation("androidx.exifinterface:exifinterface:1.4.2")
 }
 ```
+
+> Note: the version shown here (`1.0.6`) is the latest at the time of writing. Always check [Maven Central](https://central.sonatype.com/artifact/io.github.iuuaa/jpeg-compressor) for the most recent version.
 
 ### 2. Local module
 
@@ -93,6 +95,7 @@ The library logs compression parameters, duration, and memory usage. Filter by t
 - **Library details** (build, integration, examples, FAQ, CompressResult, version requirements): [jpeg-compressor/README.md](jpeg-compressor/README.md) (中文) | [jpeg-compressor/README.en.md](jpeg-compressor/README.en.md) (English).
 - **app** in this repo is a sample; run it to see compression, pick image, save to gallery.
 - **libjpeg-turbo modifications & patching steps**: see [jpeg-compressor/THIRD_PARTY.md](jpeg-compressor/THIRD_PARTY.md) for how to apply files under `libjpeg-turbo-patches` to the upstream libjpeg-turbo source.
+- **Local API docs (Dokka HTML)**: run `./gradlew :jpeg-compressor:dokkaGenerateHtml` and open `jpeg-compressor/build/dokka/html/index.html` (the generated HTML is not committed to this repo; you need to generate it locally).
 
 ---
 

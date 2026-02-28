@@ -1,7 +1,9 @@
 package com.example.jpegcompressor
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -9,12 +11,12 @@ import android.view.View
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import com.bumptech.glide.Glide
 import com.example.jpegcompressor.databinding.ActivityMainBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.example.jpegcompressor.ImagePicker
 import com.iuuaa.jpegcompressor.JPEGCompressor
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import java.io.File
@@ -29,6 +31,7 @@ class MainActivity : AppCompatActivity() {
 
     /** 系统相机拍照时使用的输出文件，用于 result 回调中取路径 */
     private var systemCameraOutputFile: File? = null
+    private var pendingSystemCameraAfterPermission: Boolean = false
 
     private val compressor = JPEGCompressor.instance
     private val imagePicker = ImagePicker.instance
@@ -87,6 +90,22 @@ class MainActivity : AppCompatActivity() {
         systemCameraOutputFile = null
     }
 
+    @RequiresApi(Build.VERSION_CODES.M)
+    private val requestCameraPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted && pendingSystemCameraAfterPermission) {
+                launchSystemCamera()
+            } else if (!granted) {
+                val msg = if (shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)) {
+                    "需要相机权限才能拍照压缩"
+                } else {
+                    "相机权限已被禁止，请在系统设置中手动开启"
+                }
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            }
+            pendingSystemCameraAfterPermission = false
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -110,7 +129,28 @@ class MainActivity : AppCompatActivity() {
         val outputFile = File(cacheDir, "system_camera_${System.currentTimeMillis()}.jpg")
         val uri: Uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", outputFile)
         systemCameraOutputFile = outputFile
-        systemCameraLauncher.launch(uri)
+        try {
+            systemCameraLauncher.launch(uri)
+        } catch (_: SecurityException) {
+            systemCameraOutputFile = null
+            val msg = "系统拒绝访问相机权限，请在系统设置中开启相机权限后重试"
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** 检查/请求相机权限，通过后再调用系统相机 */
+    private fun startSystemCameraWithPermissionCheck() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            launchSystemCamera()
+            return
+        }
+        val hasPermission = checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (hasPermission) {
+            launchSystemCamera()
+        } else {
+            pendingSystemCameraAfterPermission = true
+            requestCameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
     }
 
     private fun setupClickListeners() {
@@ -126,7 +166,7 @@ class MainActivity : AppCompatActivity() {
                                 CameraActivity::class.java
                             )
                         )
-                        2 -> launchSystemCamera()
+                        2 -> startSystemCameraWithPermissionCheck()
                     }
                 }
                 .show()
