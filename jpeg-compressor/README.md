@@ -49,7 +49,7 @@ repositories {
 
 ```kotlin
 dependencies {
-    implementation("io.github.iuuaa:jpeg-compressor:1.0.5")
+    implementation("io.github.iuuaa:jpeg-compressor:1.0.6")
     // 若使用异步 / Rx / EXIF 自动旋转，需同时添加（库内为 compileOnly）：
     implementation("io.reactivex.rxjava3:rxandroid:3.0.2")
     implementation("androidx.exifinterface:exifinterface:1.4.2")

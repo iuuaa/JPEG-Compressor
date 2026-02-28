@@ -49,7 +49,7 @@ In the app `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.iuuaa:jpeg-compressor:1.0.5")
+    implementation("io.github.iuuaa:jpeg-compressor:1.0.6")
     // If you use async/Rx or EXIF rotation (library uses compileOnly):
     implementation("io.reactivex.rxjava3:rxandroid:3.0.2")
     implementation("androidx.exifinterface:exifinterface:1.4.2")
